@@ -64,4 +64,5 @@ echo "Num workers: " $NUM_WORKERS
 
 NRS=$( (( $NUM_WORKERS <= 6 )) && echo "$NUM_WORKERS" || echo "6" )
 
+#jsrun -n $NUM_WORKERS -c 1 -g 1 -r $NRS -a 1 --smpiargs='off' dask-cuda-worker --scheduler-file $SCHEDULER_FILE  --nthreads 1 --memory-limit 85GB --device-memory-limit 16GB  --death-timeout 60 --interface ib0  --enable-infiniband --enable-nvlink --rmm-pool-size 15GB
 jsrun -n $NUM_WORKERS -c 1 -g 1 -r $NRS -a 1 --smpiargs='off' dask-cuda-worker --scheduler-file $SCHEDULER_FILE  --nthreads 1 --memory-limit 85GB --device-memory-limit 16GB  --death-timeout 60 --interface ib0  --enable-infiniband --enable-nvlink
