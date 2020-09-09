@@ -432,7 +432,7 @@ def main(package_name, file_sizes, scheduler_file_path, worker_sizes, **kwargs):
         
         if package_name == 'dask_cudf':
             # https://github.com/rapidsai/cudf/issues/2288
-            client.run(cudf.set_allocator, "default", pool=True, initial_pool_size=14 * 2 **30)
+            client.run(cudf.set_allocator, "default", pool=True, initial_pool_size=14 * 2**30)
         
     print('Will benchmark package: {} on file sizes: {} over dask workers: {}'.format(package_name, file_sizes, worker_sizes))
         
