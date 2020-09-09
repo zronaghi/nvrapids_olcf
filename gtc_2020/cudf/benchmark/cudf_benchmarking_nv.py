@@ -390,7 +390,6 @@ def launch_dask_scheduler(scheduler_json_path, interface='enp1s0f0'):
     print('Started scheduler')
 
 def launch_cuda_worker(scheduler_json_path, interface='enp1s0f0', which_gpu=0):
-    #work_cmd = 'CUDA_VISIBLE_DEVICES={} dask-cuda-worker --interface {} --scheduler-file {} --nthreads 1 --memory-limit 40GB --device-memory-limit 16GB --death-timeout 180 --enable-nvlink --rmm-pool-size 15GB &'.format(which_gpu, interface, scheduler_json_path)
     work_cmd = 'CUDA_VISIBLE_DEVICES={} dask-cuda-worker --interface {} --scheduler-file {} --nthreads 1 --memory-limit 40GB --device-memory-limit 16GB --death-timeout 180 --enable-nvlink &'.format(which_gpu, interface, scheduler_json_path)
     print('Starting worker. Will wait for 10 seconds to spin up')
     os.system(work_cmd)
@@ -433,7 +432,7 @@ def main(package_name, file_sizes, scheduler_file_path, worker_sizes, **kwargs):
         
         if package_name == 'dask_cudf':
             # https://github.com/rapidsai/cudf/issues/2288
-            client.run(cudf.set_allocator, "managed")  # Uses managed memory instead of "default"
+            client.run(cudf.set_allocator, "default", pool=True, initial_pool_size=14 * 2 **30)
         
     print('Will benchmark package: {} on file sizes: {} over dask workers: {}'.format(package_name, file_sizes, worker_sizes))
         
