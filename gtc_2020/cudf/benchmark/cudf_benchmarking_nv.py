@@ -274,8 +274,8 @@ def single_benchmark(package_name, targ_size, client,
         if isinstance(num_partitions, int) and num_partitions > 0 and num_partitions != dframe.npartitions:
             print('Setting number of partitions to: {}'.format(num_partitions))
             dframe = dframe.repartition(npartitions=num_partitions)
-    dframe = dframe.persist()
-    wait(dframe)
+        dframe = dframe.persist()
+        wait(dframe)
             
     # ----------------- SEE HEAD -----------------------------
 
