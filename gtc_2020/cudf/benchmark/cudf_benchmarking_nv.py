@@ -359,42 +359,44 @@ def single_benchmark(package_name, targ_size, client,
     merge_time = time.time() - t0
     print('Time to perform merge using {}: {}'.format(package_name, format_time(time.time() - t0)))
 
-    addr = client._scheduler_identity.get("address")
-    workers = client._scheduler_identity.get("workers", {})
-    nworkers = len(workers)
-    nthreads = sum(w["nthreads"] for w in workers.values())
-    memory = int(sum(w["memory_limit"] for w in workers.values()) // 1e9)
     print('Dataframe object of type: {}'.format(type(dframe)))
-    print('BENCHMARK:{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}'.format(
-        addr,
-        memory,
-        nworkers,
-        nthreads,
-        num_cols,
-        csv_read_time,
-        csv_read_time_2,
-        default_partitions,
-        type(dframe),
-        type(dframe_right),
-        targ_size,
-        file_size,
-        file_size_2,
-        groupby_time,
-        merge_time,
-        num_partitions,
-        original_partitions,
-        package_handle,
-        package_name,
-        package_handle.__version__,
-        persist_instead_of_compute,
-        read_chunk_mb,
-        num_rows,
-        rows_time,
-        scale_partitions_by_workers,
-        stop_at_read,
-        unique_time,
-        uniq_ids)
-    )
+
+    if 'dask' in package_name:
+        addr = client._scheduler_identity.get("address")
+        workers = client._scheduler_identity.get("workers", {})
+        nworkers = len(workers)
+        nthreads = sum(w["nthreads"] for w in workers.values())
+        memory = int(sum(w["memory_limit"] for w in workers.values()) // 1e9)
+        print('BENCHMARK:{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}'.format(
+            addr,
+            memory,
+            nworkers,
+            nthreads,
+            num_cols,
+            csv_read_time,
+            csv_read_time_2,
+            default_partitions,
+            type(dframe),
+            type(dframe_right),
+            targ_size,
+            file_size,
+            file_size_2,
+            groupby_time,
+            merge_time,
+            num_partitions,
+            original_partitions,
+            package_handle,
+            package_name,
+            package_handle.__version__,
+            persist_instead_of_compute,
+            read_chunk_mb,
+            num_rows,
+            rows_time,
+            scale_partitions_by_workers,
+            stop_at_read,
+            unique_time,
+            uniq_ids)
+        )
     
     # -------------- END ------------------------
     print('~'*10 + ' BENCHMARKING END ' + '~'*10 + '\n'*2)
