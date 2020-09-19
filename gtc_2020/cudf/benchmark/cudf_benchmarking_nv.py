@@ -14,6 +14,7 @@ from dask.utils import format_bytes, format_time
 import dask.dataframe as dd
 import dask.array as da
 from dask.distributed import Client, wait
+from dask.distributed import performance_report
 # RAPIDS SPECIFIC:
 import rmm
 import cudf
@@ -135,7 +136,9 @@ def generate_right_data(left_size, num_ids=1001):
     return csv_path
 
 def get_timeseries_path(freq, num_ids=1000):
-    if socket.getfqdn() == 'deep.ornl.gov':
+    if freq == '3260ms' or freq == '1630ms' or freq == '32600ms' or freq == '16300ms':
+        data_dir = '/gpfs/alpine/world-shared/gen119/pentschev/data/'
+    elif socket.getfqdn() == 'deep.ornl.gov':
         data_dir = '/raid/syz/rapids/data'
     else:
         data_dir = '/gpfs/alpine/world-shared/stf011/somnaths/rapids/data'
@@ -189,18 +192,22 @@ def read_csv(csv_path, package_handle, package_name, chunksize_mb=1024, **kwargs
     print('read_csv will be given: {}'.format(kwargs))
 
     t0 = time.time()
-    dframe = package_handle.read_csv('file://' + csv_path, **kwargs)
+    print("read_csv:", package_handle.read_csv)
+    dframe = package_handle.read_csv(csv_path, **kwargs)
     persist = kwargs.pop('persist', True)
     if package_name in ['dask', 'dask-cudf']:
         if persist:
             dframe = dframe.persist()
+            wait(dframe)
         else:
             print('Dataframe requested to not persist in memory')
-    print('Time to load a {} file with {}: {}'.format(format_bytes(os.stat(csv_path).st_size), package_name, format_time(time.time() - t0)))
+    file_size = format_bytes(os.stat(csv_path).st_size)
+    csv_read_time = time.time() - t0
+    print('Time to load a {} file with {}: {}'.format(file_size, package_name, format_time(csv_read_time)))
 
     print('Dataframe object of type: {}'.format(type(dframe)))
     
-    return dframe
+    return dframe, file_size, csv_read_time
 
 # ----------------------------- MAIN BENCHMARKING FUNCTION -----------------------------------------
 
@@ -219,7 +226,10 @@ def single_benchmark(package_name, targ_size, client,
           ''.format(stop_at_read, read_chunk_mb, scale_partitions_by_workers, num_partitions, default_partitions, persist_instead_of_compute, client))
     
     package_handle = package_name_to_handle[package_name]
-    print('Using package: {}. Version: {}'.format(package_handle, package_handle.__version__))
+    if package_name == 'dask':
+        print('Using package: {}. Version: {}'.format(package_handle, dask.__version__))
+    else:
+        print('Using package: {}. Version: {}'.format(package_handle, package_handle.__version__))
 
     # --------------- GET RANDOM DATA FILE PATH---------------------
     kwargs = dict()
@@ -241,7 +251,7 @@ def single_benchmark(package_name, targ_size, client,
         chunksize_mb = set_chunksize(read_chunk_mb, file_size_mb)
         # print('Interpreted requested chunksize of {} as {} MB'.format(read_chunk_mb, chunksize_mb))
             
-    dframe = read_csv(csv_path, package_handle, package_name, chunksize_mb=chunksize_mb, **kwargs)
+    dframe, file_size, csv_read_time = read_csv(csv_path, package_handle, package_name, chunksize_mb=chunksize_mb, **kwargs)
     
     if stop_at_read:
         print('~'*10 + ' BENCHMARKING END ' + '~'*10 + '\n'*2)
@@ -250,9 +260,10 @@ def single_benchmark(package_name, targ_size, client,
     # ---------- RE-PARTITION DATAFRAME -------------------------------
     # This does NOT appear to be optimized in any sensible way for either dask or dask-cudf 
     if 'dask' in package_name:
-        print('Dataframe currently has {} partitions'.format(dframe.npartitions))
+        original_partitions = dframe.npartitions
+        print('Dataframe currently has {} partitions'.format(original_partitions))
         
-        if default_partitions and chunksize_mb is not None:
+        if default_partitions and chunksize_mb is not None and num_partitions is None:
             num_partitions = get_default_num_partitions(file_size_mb, package_name)
             print('Recommended default partitions = ' + str(num_partitions))
         
@@ -263,6 +274,8 @@ def single_benchmark(package_name, targ_size, client,
         if isinstance(num_partitions, int) and num_partitions > 0 and num_partitions != dframe.npartitions:
             print('Setting number of partitions to: {}'.format(num_partitions))
             dframe = dframe.repartition(npartitions=num_partitions)
+    dframe = dframe.persist()
+    wait(dframe)
             
     # ----------------- SEE HEAD -----------------------------
 
@@ -271,8 +284,11 @@ def single_benchmark(package_name, targ_size, client,
     # -------------- QUERY SIZE OF DATAFRAME ------------------------
 
     t0 = time.time()
-    print('Dataframe has {} rows and {} columns'.format(len(dframe), len(dframe.columns)))
-    print('Time to calculate number of rows using {}: {}'.format(package_name, format_time(time.time() - t0)))
+    num_rows = len(dframe)
+    num_cols = len(dframe.columns)
+    print('Dataframe has {} rows and {} columns'.format(num_rows, num_cols))
+    rows_time = time.time() - t0
+    print('Time to calculate number of rows using {}: {}'.format(package_name, format_time(rows_time)))
 
     # -------------- COMPUTE UNIQUE IDs ------------------------
 
@@ -281,29 +297,40 @@ def single_benchmark(package_name, targ_size, client,
     
     if 'dask' in package_name:
         if persist_instead_of_compute:
-            uniq_ids.persist()
+            wait(uniq_ids.persist())
         else:
             uniq_ids = uniq_ids.compute()
-    print('Time to compute unique values: {} using {}: {}'.format(uniq_ids, package_name, format_time(time.time() - t0)))
+    unique_time = time.time() - t0
+    if persist_instead_of_compute:
+        uniq_ids = uniq_ids.compute()
+    print('Time to compute unique values: {} using {}: {}'.format(uniq_ids, package_name, format_time(unique_time)))
     
     # -------------- COMPUTE GROUPBY ------------------------
 
     t0 = time.time()
     
-    vals = (
-            dframe.groupby(col_name).min(),
-            dframe.groupby(col_name).max(),
-            dframe.groupby(col_name).mean(),
-            dframe.groupby(col_name).count(),
-        )
+    if package_name == 'dask_cudf':
+        # Use optimization from https://github.com/rapidsai/cudf/pull/6248 . Requires
+        # dask-scheduler, dask-cuda-worker, and this script to use patched dask_cudf,
+        # setting the following environment variable:
+        # PYTHONPATH=/gpfs/alpine/world-shared/gen119/pentschev/nvrapids_0.14_updates
+        vals = dframe.groupby(col_name).agg(['min', 'max', 'mean', 'count'], split_out=None, split_every=False),
+    else:
+        vals = (
+                dframe.groupby(col_name).min(),
+                dframe.groupby(col_name).max(),
+                dframe.groupby(col_name).mean(),
+                dframe.groupby(col_name).count(),
+            )
     if 'dask' in package_name:
         if persist_instead_of_compute:
-            dask.persist(vals)
+            wait(dask.persist(vals))
         else:
             vals = dask.compute(vals)
         
 
-    print('Time to compute Groupby using {}: {}'.format(package_name, format_time(time.time() - t0)))
+    groupby_time = time.time() - t0
+    print('Time to compute Groupby using {}: {}'.format(package_name, format_time(groupby_time)))
     
     if targ_size == 'ben': 
         # Can't do merge operation
@@ -315,7 +342,7 @@ def single_benchmark(package_name, targ_size, client,
 
     # ----------------- READ FROM SMALLER FILE -----------------------------
     
-    dframe_right = read_csv(csv_right, package_handle, package_name, chunksize_mb=None)
+    dframe_right, file_size_2, csv_read_time_2 = read_csv(csv_right, package_handle, package_name, chunksize_mb=None)
     if 'dask' in package_name:
         print('Dataframe (right) has {} partitions'.format(dframe_right.npartitions))
     
@@ -329,7 +356,45 @@ def single_benchmark(package_name, targ_size, client,
     if 'dask' in package_name:
         dframe_out = dframe_out.persist()
         _ = wait(dframe_out)
+    merge_time = time.time() - t0
     print('Time to perform merge using {}: {}'.format(package_name, format_time(time.time() - t0)))
+
+    addr = client._scheduler_identity.get("address")
+    workers = client._scheduler_identity.get("workers", {})
+    nworkers = len(workers)
+    nthreads = sum(w["nthreads"] for w in workers.values())
+    memory = int(sum(w["memory_limit"] for w in workers.values()) // 1e9)
+    print('Dataframe object of type: {}'.format(type(dframe)))
+    print('BENCHMARK:{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}'.format(
+        addr,
+        memory,
+        nworkers,
+        nthreads,
+        num_cols,
+        csv_read_time,
+        csv_read_time_2,
+        default_partitions,
+        type(dframe),
+        type(dframe_right),
+        targ_size,
+        file_size,
+        file_size_2,
+        groupby_time,
+        merge_time,
+        num_partitions,
+        original_partitions,
+        package_handle,
+        package_name,
+        package_handle.__version__,
+        persist_instead_of_compute,
+        read_chunk_mb,
+        num_rows,
+        rows_time,
+        scale_partitions_by_workers,
+        stop_at_read,
+        unique_time,
+        uniq_ids)
+    )
     
     # -------------- END ------------------------
     print('~'*10 + ' BENCHMARKING END ' + '~'*10 + '\n'*2)
@@ -390,6 +455,7 @@ def launch_dask_scheduler(scheduler_json_path, interface='enp1s0f0'):
     print('Started scheduler')
 
 def launch_cuda_worker(scheduler_json_path, interface='enp1s0f0', which_gpu=0):
+    #work_cmd = 'CUDA_VISIBLE_DEVICES={} dask-cuda-worker --interface {} --scheduler-file {} --nthreads 1 --memory-limit 40GB --device-memory-limit 16GB --death-timeout 180 --enable-nvlink --rmm-pool-size 15GB &'.format(which_gpu, interface, scheduler_json_path)
     work_cmd = 'CUDA_VISIBLE_DEVICES={} dask-cuda-worker --interface {} --scheduler-file {} --nthreads 1 --memory-limit 40GB --device-memory-limit 16GB --death-timeout 180 --enable-nvlink &'.format(which_gpu, interface, scheduler_json_path)
     print('Starting worker. Will wait for 10 seconds to spin up')
     os.system(work_cmd)
@@ -430,9 +496,10 @@ def main(package_name, file_sizes, scheduler_file_path, worker_sizes, **kwargs):
         print('Calling Client setup with: scheduler json: {}, expected workers: {}'.format(scheduler_file_path, worker_sizes[0]))
         client = set_up_dask_client(scheduler_file_path, num_exp_workers=worker_sizes[0])
         
-        if package_name == 'dask_cudf':
-            # https://github.com/rapidsai/cudf/issues/2288
-            client.run(cudf.set_allocator, "default", pool=True, initial_pool_size=14 * 2**30)
+        #if package_name == 'dask_cudf':
+        #    # https://github.com/rapidsai/cudf/issues/2288
+        #    #client.run(cudf.set_allocator, "managed")  # Uses managed memory instead of "default"
+        #    client.run(cudf.set_allocator, "default", pool=True, initial_pool_size=15 * 2**30)
         
     print('Will benchmark package: {} on file sizes: {} over dask workers: {}'.format(package_name, file_sizes, worker_sizes))
         
@@ -467,6 +534,8 @@ def main(package_name, file_sizes, scheduler_file_path, worker_sizes, **kwargs):
                     new_kwargs = kwargs.copy()
                     new_kwargs.update({'num_partitions': this_parts, 'read_chunk_mb': this_chunksize})
                     single_benchmark(package_name, dsize, client, **new_kwargs)
+                    #with performance_report("dask-report-tcp.html"):
+                    #    single_benchmark(package_name, dsize, client, **new_kwargs)
 
             
 # ----------------------------------- GENERAL HELPER FUNCTIONS -----------------------------------------
@@ -474,9 +543,9 @@ def main(package_name, file_sizes, scheduler_file_path, worker_sizes, **kwargs):
 def validate_file_sizes(file_sizes):
     
     if file_sizes is None:
-        return ['1G', '2.5G', '5G' , '10G', '25G']
+        return ['1G', '2.5G', '5G' , '10G', '25G', '50G', '100G']
     for item in file_sizes:
-        if item not in ['1G', '2.5G', '5G' , '10G', '25G', 'ben']:
+        if item not in ['1G', '2.5G', '5G' , '10G', '25G', '50G', '100G', 'ben']:
             raise ValueError('Provided file size: {} is not a valid option.')
     return file_sizes
         
