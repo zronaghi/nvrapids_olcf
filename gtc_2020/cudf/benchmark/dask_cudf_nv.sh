@@ -11,6 +11,7 @@ module load gcc/7.4.0
 module load cuda/10.1.243
 module load python/3.7.0-anaconda3-5.3.0
 
+export PYTHONPATH=/gpfs/alpine/world-shared/gen119/pentschev/nvrapids_0.14_updates
 export PATH=$WORLDWORK/stf011/nvrapids_0.14_gcc_7.4.0/bin:$PATH
 
 # I/O - TESTING CHUNKING
