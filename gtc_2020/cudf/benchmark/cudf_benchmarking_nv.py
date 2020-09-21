@@ -173,7 +173,7 @@ def set_chunksize(read_chunk_mb, file_size_mb):
     else:
         if read_chunk_mb <= 0:
             # dask - very easy - 1 GB
-            # dask-cudf - except for 25 GB all else show best performance at 1 GB
+            # dask_cudf - except for 25 GB all else show best performance at 1 GB
             chunksize_mb = 1024 # min(int(file_size_mb), 1024)
         else:
             chunksize_mb = read_chunk_mb
@@ -183,7 +183,7 @@ def set_chunksize(read_chunk_mb, file_size_mb):
 def read_csv(csv_path, package_handle, package_name, chunksize_mb=1024, **kwargs):
     #kwargs = dict()
     if isinstance(chunksize_mb, int) and chunksize_mb >= 32:
-        if package_name == 'dask-cudf':
+        if package_name == 'dask_cudf':
             kwargs['chunksize'] = str(chunksize_mb) + 'MiB'
         elif package_name == 'dask':
             kwargs['blocksize'] = str(chunksize_mb) + 'MB'
@@ -195,7 +195,7 @@ def read_csv(csv_path, package_handle, package_name, chunksize_mb=1024, **kwargs
     print("read_csv:", package_handle.read_csv)
     dframe = package_handle.read_csv(csv_path, **kwargs)
     persist = kwargs.pop('persist', True)
-    if package_name in ['dask', 'dask-cudf']:
+    if package_name in ['dask', 'dask_cudf']:
         if persist:
             dframe = dframe.persist()
             wait(dframe)
@@ -258,7 +258,7 @@ def single_benchmark(package_name, targ_size, client,
         return
     
     # ---------- RE-PARTITION DATAFRAME -------------------------------
-    # This does NOT appear to be optimized in any sensible way for either dask or dask-cudf 
+    # This does NOT appear to be optimized in any sensible way for either dask or dask_cudf 
     if 'dask' in package_name:
         original_partitions = dframe.npartitions
         print('Dataframe currently has {} partitions'.format(original_partitions))
@@ -563,27 +563,27 @@ def validate_package_name(package_name):
 if __name__ == '__main__':    
     args = argparse.ArgumentParser()
     args.add_argument('--package', default='pandas', type=str,
-                      help='dataframe package. One of: dask, dask-cudf, cudf or pandas')
+                      help='dataframe package. One of: dask, dask_cudf, cudf or pandas')
     args.add_argument('--file_size', default=None, type=str, nargs='+', 
                       help='Primary file size in GB. Use one (or list) of 1G, 2.5G, 5G, 10G, or 25G or leave unspecified to loop over all sizes')
     args.add_argument('--stop_at_read', default=False, type=bool,
                       help='Whether to stop benchmark after reading the primary CSV file. Use for testing I/O only')
     args.add_argument('--read_chunk_mb', default=None, type=int, nargs='+',
-                      help='chunksize(s) or blocksize(s) in MB to be passed onto read_csv(). Set to < 0 for best block size. Note - this directly affects number of partitions. Applies to dask and dask-cudf only.')
+                      help='chunksize(s) or blocksize(s) in MB to be passed onto read_csv(). Set to < 0 for best block size. Note - this directly affects number of partitions. Applies to dask and dask_cudf only.')
     
     args.add_argument('--scale_partitions_by_workers', default=None, type=int,
-                      help='Partitions the dataframe into scale_partitions_by_workers * number of dask workers. Applies to dask and dask-cudf only.')
+                      help='Partitions the dataframe into scale_partitions_by_workers * number of dask workers. Applies to dask and dask_cudf only.')
     args.add_argument('--default_partitions', default=True, type=bool,
-                      help='Sets number of partitions to default values according to package. Applies to dask and dask-cudf only.')
+                      help='Sets number of partitions to default values according to package. Applies to dask and dask_cudf only.')
     args.add_argument('--num_partitions', default=None, type=int, nargs='+', 
-                      help='Partitions the dataframe into the specified number of partitions. Can be specified as a list of integers. Applies to dask and dask-cudf only.')
+                      help='Partitions the dataframe into the specified number of partitions. Can be specified as a list of integers. Applies to dask and dask_cudf only.')
     
     args.add_argument('--num_dask_workers', default=None, type=int, nargs='+', 
-                      help='Number of expected dask workers linked with the scheduler. Specify a list of (increasing) integers to instruct how the workers need to be varied. Example: "--num_dask_workers 4" will only use 4; "--num_dask_workers 1 2 4" scales over 1, 2, and 4. Applies to dask and dask-cudf only.')
+                      help='Number of expected dask workers linked with the scheduler. Specify a list of (increasing) integers to instruct how the workers need to be varied. Example: "--num_dask_workers 4" will only use 4; "--num_dask_workers 1 2 4" scales over 1, 2, and 4. Applies to dask and dask_cudf only.')
     args.add_argument('--scheduler_json_path', default=None, type=str,
-                      help='Absolute path to Dask scheduler JSON file. Applies to dask and dask-cudf only.')
+                      help='Absolute path to Dask scheduler JSON file. Applies to dask and dask_cudf only.')
     args.add_argument('--persist_instead_of_compute', default=False, type=bool,
-                      help='Set to True to use persist(). set to False to use compute(). Applies only to dask and dask-cudf')
+                      help='Set to True to use persist(). set to False to use compute(). Applies only to dask and dask_cudf')
 
     args = args.parse_args()
 
