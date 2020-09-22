@@ -2,7 +2,7 @@
 
 #BSUB -P GEN119
 #BSUB -W 1:00
-#BSUB -alloc_flags "gpumps smt4"
+#BSUB -alloc_flags "gpumps smt4 nvme"
 #BSUB -nnodes 1
 #BSUB -J dask_cuda_cluster
 #BSUB -o dask_cuda_cluster.o%J
@@ -64,6 +64,9 @@ export NUM_WORKERS=$num_workers
 echo "Num workers: " $NUM_WORKERS
 
 NRS=$( (( $NUM_WORKERS <= 6 )) && echo "$NUM_WORKERS" || echo "6" )
+
+#copy data to NVMe
+jsrun -n 1 cp -r /gpfs/alpine/world-shared/stf011/somnaths/rapids/data /mnt/bb/$USER/
 
 #jsrun -n $NUM_WORKERS -c 1 -g 1 -r $NRS -a 1 --smpiargs='off' dask-cuda-worker --scheduler-file $SCHEDULER_FILE  --nthreads 1 --memory-limit 85GB --device-memory-limit 16GB  --death-timeout 60 --interface ib0  --enable-infiniband --enable-nvlink --rmm-pool-size 15GB
 jsrun -n $NUM_WORKERS -c 7 -g 1 -r $NRS -a 1 --smpiargs='off' dask-cuda-worker --scheduler-file $SCHEDULER_FILE  --nthreads 1 --memory-limit 85GB --device-memory-limit 16GB  --death-timeout 60 --interface ib0  --enable-infiniband --enable-nvlink
