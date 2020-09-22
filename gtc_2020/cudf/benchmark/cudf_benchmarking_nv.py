@@ -141,7 +141,8 @@ def get_timeseries_path(freq, num_ids=1000):
     elif socket.getfqdn() == 'deep.ornl.gov':
         data_dir = '/raid/syz/rapids/data'
     else:
-        data_dir = '/gpfs/alpine/world-shared/stf011/somnaths/rapids/data'
+        #data_dir = '/gpfs/alpine/world-shared/stf011/somnaths/rapids/data'
+        data_dir = '/mnt/bb/zronagh/data'
     
     return os.path.join(data_dir, 'timeseries_{}_ids_{}_freq.csv'.format(num_ids, freq))
 
@@ -402,7 +403,7 @@ def single_benchmark(package_name, targ_size, client,
             original_partitions,
             package_handle,
             package_name,
-            package_handle.__version__,
+            dask.__version__,
             persist_instead_of_compute,
             read_chunk_mb,
             num_rows,

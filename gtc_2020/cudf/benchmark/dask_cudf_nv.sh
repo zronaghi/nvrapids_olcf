@@ -1,11 +1,11 @@
-NUM_WORKERS=42
-PACKAGE="dask"
-#PACKAGE="dask_cudf"
+NUM_WORKERS=6
+#PACKAGE="dask"
+PACKAGE="dask_cudf"
 #PACKAGE="cudf"
 SCRIPT="cudf_benchmarking_nv.py"
 PROJ_ID="gen119"
-SCHEDULER_JSON="$MEMBERWORK/$PROJ_ID/dask/my-scheduler.json"
-#SCHEDULER_JSON="$MEMBERWORK/$PROJ_ID/dask/my-scheduler-gpu.json"
+#SCHEDULER_JSON="$MEMBERWORK/$PROJ_ID/dask/my-scheduler.json"
+SCHEDULER_JSON="$MEMBERWORK/$PROJ_ID/dask/my-scheduler-gpu.json"
 
 module load gcc/7.4.0
 module load cuda/10.1.243
@@ -14,6 +14,9 @@ module load python/3.7.0-anaconda3-5.3.0
 export PYTHONPATH=/gpfs/alpine/world-shared/gen119/pentschev/nvrapids_0.14_updates
 export PATH=$WORLDWORK/stf011/nvrapids_0.14_gcc_7.4.0/bin:$PATH
 
+# allocate batch node before this script: bsub -W 1:00 -nnodes 1 -alloc_flags "NVME" -P gen119 -Is bash
+jsrun -n 1 cp -r /gpfs/alpine/world-shared/stf011/somnaths/rapids/data /mnt/bb/$USER/
+
 # I/O - TESTING CHUNKING
 
 #python $SCRIPT --package $PACKAGE --num_dask_workers $NUM_WORKERS --scheduler_json_path $SCHEDULER_JSON --file_size 20G --read_chunk_mb 4096 --stop_at_read True
@@ -21,5 +24,5 @@ export PATH=$WORLDWORK/stf011/nvrapids_0.14_gcc_7.4.0/bin:$PATH
 
 # Partitioning
 
-#python $SCRIPT --package $PACKAGE --num_dask_workers $NUM_WORKERS --scheduler_json_path $SCHEDULER_JSON --file_size 25G
-python $SCRIPT --package $PACKAGE --num_dask_workers $NUM_WORKERS --scheduler_json_path $SCHEDULER_JSON --file_size 25G --num_partitions 96
+#python $SCRIPT --package $PACKAGE --num_dask_workers $NUM_WORKERS --scheduler_json_path $SCHEDULER_JSON --file_size 25G --read_chunk_mb 512
+jsrun -n 1 -c 1 -g 1 --smpiargs='off' python $SCRIPT --package $PACKAGE --num_dask_workers $NUM_WORKERS --scheduler_json_path $SCHEDULER_JSON --file_size 25G 25G --persist_instead_of_compute True
