@@ -364,7 +364,25 @@ def single_benchmark(package_name, targ_size, client,
     # cudf doesn't handle datetime indexes well yet, so we convert to integer dtype
     dframe.index = dframe.index.astype(int)
     dframe_right.index = dframe_right.index.astype(int)
-    
+
+    if 'dask' in package_name:
+        dframe_right = dframe_right.persist()
+        wait(dframe_right)
+
+    # ----------------- RANDOMIZE LEFT FRAME'S INDEX -----------------------------
+    # Randomizing left frame's index here is done to simulate a real application of
+    # join/merge. This prevents joining on a simple RangeIndex, which causes the
+    # resulting array to simply return the first min(len(dframe), len(dframe_right))
+    # rows.
+    if 'dask' in package_name:
+        dframe['new_index'] = da.from_array(np.random.randint(0, 2*len(dframe), len(dframe)),
+                                            chunks=tuple(dframe.map_partitions(len).compute()))
+        dframe = dframe.set_index('new_index')
+        dframe = dframe.persist()
+        wait(dframe)
+    else:
+        dframe.index = np.random.randint(0, 2*len(dframe_right), len(dframe))
+
     # ----------------- PERFORM THE MERGE -----------------------------
     t0 = time.time()
     dframe_out = dframe.merge(dframe_right, left_index=True, right_index=True, how='inner')
