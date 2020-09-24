@@ -517,6 +517,8 @@ def main(package_name, file_sizes, scheduler_file_path, worker_sizes, **kwargs):
     if 'dask' not in package_name:
         worker_sizes = [1]
         client = None
+        if package_name == 'cudf':
+            cudf.set_allocator("default", pool=True, initial_pool_size=15 * 2**30)
     else:
         if worker_sizes is None:
             worker_sizes = [1]
